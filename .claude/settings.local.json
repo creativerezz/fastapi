@@ -9,7 +9,13 @@
       "Bash(curl \"http://127.0.0.1:8000/transcript/dQw4w9WgXcQ/list\")",
       "Bash(curl \"https://fastapi-youtube-transcript.up.railway.app/\")",
       "Bash(curl \"https://fastapi-youtube-transcript.up.railway.app/transcript/dQw4w9WgXcQ?languages=en\")",
-      "Bash(curl \"https://fastapi-youtube-transcript.up.railway.app/transcript/dQw4w9WgXcQ/list\")"
+      "Bash(curl \"https://fastapi-youtube-transcript.up.railway.app/transcript/dQw4w9WgXcQ/list\")",
+      "Bash(curl \"http://127.0.0.1:8000/transcript/dQw4w9WgXcQ/summarize\")",
+      "Bash(curl \"http://127.0.0.1:8000/transcript/dQw4w9WgXcQ/summarize?model=google/gemini-2.0-flash-exp:free\")",
+      "Bash(curl \"http://127.0.0.1:8000/transcript/jNQXAC9IVRw/summarize?model=meta-llama/llama-3.3-70b-instruct:free\")",
+      "Bash(curl \"http://127.0.0.1:8000/\")",
+      "Bash(curl \"http://127.0.0.1:8000/transcript/jNQXAC9IVRw/summarize\")",
+      "Bash(curl \"http://127.0.0.1:8000/transcript/dQw4w9WgXcQ/summarize?model=meta-llama/llama-3.3-70b-instruct:free\")"
     ],
     "deny": [],
     "ask": []

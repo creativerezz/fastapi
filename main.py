@@ -4,6 +4,10 @@ from fastapi import FastAPI, HTTPException, Query
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api.proxies import WebshareProxyConfig
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = FastAPI()
 
@@ -109,7 +113,7 @@ async def summarize_transcript(
     video_id: str,
     languages: str = "en",
     model: str = Query(
-        default="deepseek/deepseek-chat-v3.1:free",
+        default="google/gemini-2.0-flash-exp:free",
         description="OpenRouter model ID (use :free models from openrouter-free-llms.txt)"
     )
 ):
@@ -119,15 +123,15 @@ async def summarize_transcript(
     Args:
         video_id: YouTube video ID (not full URL)
         languages: Comma-separated language codes (default: "en")
-        model: OpenRouter model identifier (default: deepseek/deepseek-chat-v3.1:free)
+        model: OpenRouter model identifier (default: google/gemini-2.0-flash-exp:free)
 
     Available free models:
-        - google/gemini-2.0-flash-exp:free (1M context)
+        - google/gemini-2.0-flash-exp:free (1M context) - DEFAULT
         - deepseek/deepseek-chat-v3.1:free (163k context)
         - qwen/qwen3-coder:free (262k context)
         - meta-llama/llama-3.3-70b-instruct:free (65k context)
 
-    Example: /transcript/dQw4w9WgXcQ/summarize?model=google/gemini-2.0-flash-exp:free
+    Example: /transcript/dQw4w9WgXcQ/summarize
     """
     try:
         # Get OpenRouter API key
@@ -163,17 +167,38 @@ async def summarize_transcript(
                 {
                     "role": "system",
                     "content": (
-                        "You are a helpful AI assistant that creates concise, well-structured summaries "
-                        "of YouTube video transcripts. Provide a clear summary with:\n"
-                        "1. Main Topic: A brief overview of what the video is about\n"
-                        "2. Key Points: 3-5 bullet points highlighting the most important information\n"
-                        "3. Conclusion: A brief final takeaway\n\n"
-                        "Keep the summary informative but concise."
+                        "# IDENTITY and PURPOSE\n\n"
+                        "You are an AI assistant specialized in creating concise, informative summaries of YouTube video content "
+                        "based on transcripts. Your role is to analyze video transcripts, identify key points, main themes, and "
+                        "significant moments, then organize this information into a well-structured summary that includes relevant "
+                        "timestamps. You excel at distilling lengthy content into digestible summaries while preserving the most "
+                        "valuable information and maintaining the original flow of the video.\n\n"
+                        "Take a step back and think step-by-step about how to achieve the best possible results by following the steps below.\n\n"
+                        "## STEPS\n\n"
+                        "- Carefully read through the entire transcript to understand the overall content and structure of the video\n"
+                        "- Identify the main topic and purpose of the video\n"
+                        "- Note key points, important concepts, and significant moments throughout the transcript\n"
+                        "- Pay attention to natural transitions or segment changes in the video\n"
+                        "- Extract relevant timestamps for important moments or topic changes\n"
+                        "- Organize information into a logical structure that follows the video's progression\n"
+                        "- Create a concise summary that captures the essence of the video\n"
+                        "- Include timestamps alongside key points to allow easy navigation\n"
+                        "- Ensure the summary is comprehensive yet concise\n\n"
+                        "## OUTPUT INSTRUCTIONS\n\n"
+                        "- Only output Markdown\n"
+                        "- Begin with a brief overview of the video's main topic and purpose\n"
+                        "- Structure the summary with clear headings and subheadings that reflect the video's organization\n"
+                        "- Include timestamps in [MM:SS] format (or [HH:MM:SS] for videos over 1 hour) before each key point or section\n"
+                        "- Keep the summary concise but comprehensive, focusing on the most valuable information\n"
+                        "- Use bullet points for lists of related points when appropriate\n"
+                        "- Bold or italicize particularly important concepts or takeaways\n"
+                        "- End with a brief conclusion summarizing the video's main message or call to action\n"
+                        "- Ensure you follow ALL these instructions when creating your output."
                     )
                 },
                 {
                     "role": "user",
-                    "content": f"Please summarize this YouTube video transcript:\n\n{transcript_text}"
+                    "content": f"Please create a detailed summary of this YouTube video transcript:\n\n{transcript_text}"
                 }
             ]
         }
@@ -216,4 +241,8 @@ async def summarize_transcript(
     except requests.exceptions.Timeout:
         raise HTTPException(status_code=504, detail="OpenRouter API request timed out")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+        import traceback
+        error_details = f"{type(e).__name__}: {str(e)}" if str(e) else f"{type(e).__name__}: {repr(e)}"
+        print(f"Summarization error: {error_details}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=error_details)

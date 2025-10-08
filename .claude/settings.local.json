@@ -6,7 +6,10 @@
       "Bash(curl \"http://127.0.0.1:8000/transcript/dQw4w9WgXcQ?languages=en\")",
       "Bash(python3:*)",
       "Bash(unset:*)",
-      "Bash(curl \"http://127.0.0.1:8000/transcript/dQw4w9WgXcQ/list\")"
+      "Bash(curl \"http://127.0.0.1:8000/transcript/dQw4w9WgXcQ/list\")",
+      "Bash(curl \"https://fastapi-youtube-transcript.up.railway.app/\")",
+      "Bash(curl \"https://fastapi-youtube-transcript.up.railway.app/transcript/dQw4w9WgXcQ?languages=en\")",
+      "Bash(curl \"https://fastapi-youtube-transcript.up.railway.app/transcript/dQw4w9WgXcQ/list\")"
     ],
     "deny": [],
     "ask": []

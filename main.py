@@ -14,7 +14,8 @@ load_dotenv()
 app = FastAPI()
 
 # Get model name from environment variables
-MODEL_NAME = os.getenv("model_id") or os.getenv("MODEL_ID") or "qwen/qwen3-coder:free"
+# Default to DeepSeek V3.1 (163k context, very reliable)
+MODEL_NAME = os.getenv("model_id") or os.getenv("MODEL_ID") or "deepseek/deepseek-chat-v3.1:free"
 
 # Initialize YouTube Transcript API with proxy support for Railway deployment
 def get_youtube_api():

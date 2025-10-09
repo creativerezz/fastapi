@@ -281,20 +281,15 @@ async def summarize_transcript(
                 {
                     "role": "system",
                     "content": (
-                        "You are a YouTube video transcript summarizer. Analyze the transcript and create a concise, well-structured summary in Markdown format.\n\n"
-                        "Your summary must include:\n"
-                        "1. A brief overview of the video's main topic\n"
-                        "2. Key points organized with clear headings\n"
-                        "3. Timestamps in [MM:SS] format (or [HH:MM:SS] for videos over 1 hour) before important moments\n"
-                        "4. Bullet points for related concepts\n"
-                        "5. Bold text for critical takeaways\n"
-                        "6. A brief conclusion\n\n"
-                        "Focus on extracting the most valuable information while maintaining the video's logical flow."
+                        "You are a video transcript summarizer. Create Markdown summaries with: "
+                        "1) Brief overview, 2) Clear headings, 3) Timestamps [MM:SS] before key points, "
+                        "4) Bullet points, 5) Bold takeaways, 6) Conclusion. "
+                        "Output only the summary, no explanations."
                     )
                 },
                 {
                     "role": "user",
-                    "content": f"Summarize this YouTube video transcript:\n\n{transcript_text}"
+                    "content": f"Summarize this transcript:\n\n{transcript_text}"
                 }
             ]
         }

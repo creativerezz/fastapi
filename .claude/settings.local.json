@@ -25,7 +25,9 @@
       "Bash(pip3 install:*)",
       "Bash(curl:*)",
       "Bash(printf \"JSON (default): \")",
-      "Bash(printf \"TEXT format:\\n\")"
+      "Bash(printf \"TEXT format:\\n\")",
+      "Bash(bun create:*)",
+      "Bash(bun install:*)"
     ],
     "deny": [],
     "ask": []

@@ -68,22 +68,22 @@ Choose from 50+ free LLMs on OpenRouter (see `openrouter-free-llms.txt`):
 
 ### Fetch Transcript
 ```bash
-curl "https://your-app.railway.app/transcript/dQw4w9WgXcQ?languages=en"
+curl "https://api.automatehub.dev/transcript/dQw4w9WgXcQ?languages=en"
 ```
 
 ### List Available Transcripts
 ```bash
-curl "https://your-app.railway.app/transcript/dQw4w9WgXcQ/list"
+curl "https://api.automatehub.dev/transcript/dQw4w9WgXcQ/list"
 ```
 
 ### AI Summary (Default: DeepSeek V3.1)
 ```bash
-curl "https://your-app.railway.app/transcript/dQw4w9WgXcQ/summarize"
+curl "https://api.automatehub.dev/transcript/dQw4w9WgXcQ/summarize"
 ```
 
 ### AI Summary with Specific Model
 ```bash
-curl "https://your-app.railway.app/transcript/dQw4w9WgXcQ/summarize?model=google/gemini-2.0-flash-exp:free"
+curl "https://api.automatehub.dev/transcript/dQw4w9WgXcQ/summarize?model=google/gemini-2.0-flash-exp:free"
 ```
 
 ## 📝 Notes

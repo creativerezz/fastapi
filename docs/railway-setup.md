@@ -42,19 +42,19 @@ WEBSHARE_PROXY_PASSWORD=your_proxy_password
 
 ## Step 4: Test Your Deployment
 
-Once deployed, Railway will provide a URL like `https://your-app.railway.app`
+Once deployed, the production instance is available at `https://api.automatehub.dev`. If you deploy your own copy on Railway, substitute your service URL where appropriate.
 
 Test the endpoints:
 
 ```bash
 # Check if the API is running
-curl https://your-app.railway.app/
+curl https://api.automatehub.dev/
 
 # List available transcripts for a video
-curl https://your-app.railway.app/transcript/dQw4w9WgXcQ/list
+curl https://api.automatehub.dev/transcript/dQw4w9WgXcQ/list
 
 # Fetch English transcript
-curl https://your-app.railway.app/transcript/dQw4w9WgXcQ?languages=en
+curl https://api.automatehub.dev/transcript/dQw4w9WgXcQ?languages=en
 ```
 
 ## API Endpoints
@@ -71,7 +71,7 @@ Fetch transcript for a video
 
 **Example:**
 ```
-https://your-app.railway.app/transcript/dQw4w9WgXcQ?languages=en,de
+https://api.automatehub.dev/transcript/dQw4w9WgXcQ?languages=en,de
 ```
 
 ### GET /transcript/{video_id}/list
@@ -82,7 +82,7 @@ List all available transcripts for a video
 
 **Example:**
 ```
-https://your-app.railway.app/transcript/dQw4w9WgXcQ/list
+https://api.automatehub.dev/transcript/dQw4w9WgXcQ/list
 ```
 
 ## Local Development

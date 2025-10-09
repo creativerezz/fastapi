@@ -672,3 +672,166 @@ async def extract_wisdom(
         print(f"Wisdom extraction error: {error_details}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=error_details)
+
+@app.post("/transcript/{video_id}/chat")
+async def chat_about_video(
+    video_id: str,
+    request_body: dict,
+    languages: str = "en",
+    model: str = Query(
+        default=MODEL_NAME,
+        description="OpenRouter model ID (use :free models from openrouter-free-llms.txt)"
+    )
+):
+    """
+    Chat about a video with AI that has access to the full transcript context
+    
+    Request body:
+        {
+            "message": "Your question about the video",
+            "conversation_history": [  // Optional previous messages
+                {"role": "user", "content": "Previous question"},
+                {"role": "assistant", "content": "Previous answer"}
+            ]
+        }
+    
+    Args:
+        video_id: YouTube video ID
+        languages: Comma-separated language codes (default: "en")
+        model: OpenRouter model identifier
+    
+    Example:
+        POST /transcript/dQw4w9WgXcQ/chat
+        Body: {"message": "What are the main tools mentioned?"}
+    """
+    try:
+        # Validate request
+        user_message = request_body.get("message")
+        if not user_message:
+            raise HTTPException(status_code=400, detail="Message field is required")
+        
+        conversation_history = request_body.get("conversation_history", [])
+        
+        # Get OpenRouter API key
+        openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+        if not openrouter_api_key:
+            raise HTTPException(
+                status_code=500,
+                detail="OPENROUTER_API_KEY environment variable not set"
+            )
+        
+        # Fetch the transcript
+        ytt_api = get_youtube_api()
+        language_list = [lang.strip() for lang in languages.split(",")]
+        fetched_transcript = ytt_api.fetch(video_id, languages=language_list)
+        
+        # Convert transcript to plain text
+        transcript_text = "\n".join([
+            f"[{entry['start']:.2f}s] {entry['text']}"
+            for entry in fetched_transcript.to_raw_data()
+        ])
+        
+        # Build system prompt with transcript context
+        system_prompt = (
+            "You are a helpful AI assistant that answers questions about a YouTube video. "
+            "You have access to the full transcript with timestamps. "
+            "Be concise, accurate, and reference specific timestamps when relevant.\n\n"
+            f"TRANSCRIPT:\n{transcript_text}\n\n"
+            "Answer the user's questions based solely on this transcript content."
+        )
+        
+        # Build conversation messages
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # Add conversation history
+        for msg in conversation_history:
+            if msg.get("role") in ["user", "assistant"] and msg.get("content"):
+                messages.append({
+                    "role": msg["role"],
+                    "content": msg["content"]
+                })
+        
+        # Add current user message
+        messages.append({"role": "user", "content": user_message})
+        
+        # Call OpenRouter with fallback
+        models_to_try = [model] if model not in FALLBACK_MODELS else []
+        models_to_try.extend(FALLBACK_MODELS)
+        
+        headers = {
+            "Authorization": f"Bearer {openrouter_api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/creativerezz/fastapi",
+            "X-Title": "Automatehub Video Chat"
+        }
+        
+        last_error = None
+        
+        for current_model in models_to_try:
+            try:
+                payload = {"model": current_model, "messages": messages}
+                
+                response = requests.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=60
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    assistant_message = result["choices"][0]["message"]["content"]
+                    
+                    return {
+                        "video_id": video_id,
+                        "language": fetched_transcript.language,
+                        "model": current_model,
+                        "user_message": user_message,
+                        "assistant_response": assistant_message,
+                        "fallback_used": current_model != model,
+                        "usage": result.get("usage", {})
+                    }
+                
+                if response.status_code == 429:
+                    print(f"Model {current_model} is rate-limited, trying next...")
+                    last_error = f"Rate limited: {current_model}"
+                    continue
+                
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"OpenRouter API error: {response.text}"
+                )
+                
+            except requests.exceptions.Timeout:
+                print(f"Model {current_model} timed out, trying next...")
+                last_error = f"Timeout: {current_model}"
+                continue
+            except HTTPException:
+                raise
+            except Exception as e:
+                print(f"Error with model {current_model}: {str(e)}")
+                last_error = f"Error: {str(e)}"
+                continue
+        
+        raise HTTPException(
+            status_code=503,
+            detail=f"All models unavailable. Last error: {last_error}"
+        )
+        
+    except TranscriptsDisabled:
+        raise HTTPException(status_code=404, detail="Transcripts are disabled for this video")
+    except NoTranscriptFound:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No transcript found for languages: {languages}"
+        )
+    except VideoUnavailable:
+        raise HTTPException(status_code=404, detail="Video not found or unavailable")
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_details = f"{type(e).__name__}: {str(e)}"
+        print(f"Chat error: {error_details}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=error_details)

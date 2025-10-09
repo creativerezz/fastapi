@@ -18,7 +18,7 @@ A FastAPI application that fetches YouTube video transcripts using the youtube-t
 
 - FastAPI REST API
 - [Hypercorn](https://hypercorn.readthedocs.io/) ASGI server
-- YouTube transcript extraction
+- YouTube transcript extraction with **multiple output formats** (JSON, Text, SRT, VTT)
 - **AI-powered transcript summarization** using OpenRouter's free LLMs
 - Webshare proxy support for cloud deployments (avoids YouTube IP blocks)
 - Multi-language transcript support
@@ -27,9 +27,18 @@ A FastAPI application that fetches YouTube video transcripts using the youtube-t
 ## 🚀 API Endpoints
 
 - `GET /` - Health check
-- `GET /transcript/{video_id}` - Fetch transcript for a video
+- `GET /transcript/{video_id}` - Fetch transcript for a video (supports multiple formats)
 - `GET /transcript/{video_id}/list` - List all available transcripts
 - `GET /transcript/{video_id}/summarize` - **AI summary of transcript** (uses OpenRouter free models)
+
+### Output Formats
+
+The `/transcript/{video_id}` endpoint supports multiple output formats via the `format` query parameter:
+
+- **`json`** (default) - Structured JSON with metadata and transcript array
+- **`text`** - Plain text with timestamps (e.g., `[00:18] transcript text`)
+- **`srt`** - SubRip subtitle format (standard subtitle file)
+- **`vtt`** - WebVTT subtitle format (web video text tracks)
 
 ## 💁‍♀️ Local Development
 
@@ -66,9 +75,24 @@ Choose from 50+ free LLMs on OpenRouter (see `openrouter-free-llms.txt`):
 
 ## 📖 Example Usage
 
-### Fetch Transcript
+### Fetch Transcript (JSON format, default)
 ```bash
 curl "https://api.automatehub.dev/transcript/dQw4w9WgXcQ?languages=en"
+```
+
+### Fetch Transcript as Plain Text
+```bash
+curl "https://api.automatehub.dev/transcript/dQw4w9WgXcQ?format=text"
+```
+
+### Fetch Transcript as SRT Subtitles
+```bash
+curl "https://api.automatehub.dev/transcript/dQw4w9WgXcQ?format=srt" > subtitles.srt
+```
+
+### Fetch Transcript as WebVTT
+```bash
+curl "https://api.automatehub.dev/transcript/dQw4w9WgXcQ?format=vtt" > subtitles.vtt
 ```
 
 ### List Available Transcripts

@@ -1,6 +1,8 @@
 import os
 import requests
+from datetime import timedelta
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api.proxies import WebshareProxyConfig
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
@@ -10,6 +12,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = FastAPI()
+
+# Get model name from environment variables
+MODEL_NAME = os.getenv("model_id") or os.getenv("MODEL_ID") or "qwen/qwen3-coder:free"
 
 # Initialize YouTube Transcript API with proxy support for Railway deployment
 def get_youtube_api():
@@ -33,20 +38,102 @@ def get_youtube_api():
     # No proxy for local development
     return YouTubeTranscriptApi()
 
+def format_timestamp(seconds: float) -> str:
+    """Convert seconds to HH:MM:SS or MM:SS format"""
+    td = timedelta(seconds=seconds)
+    total_seconds = int(td.total_seconds())
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    secs = total_seconds % 60
+
+    if hours > 0:
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
+
+def format_as_text(transcript_data: list) -> str:
+    """Format transcript as plain text with timestamps"""
+    lines = []
+    for entry in transcript_data:
+        timestamp = format_timestamp(entry['start'])
+        lines.append(f"[{timestamp}] {entry['text']}")
+    return "\n".join(lines)
+
+def format_as_srt(transcript_data: list) -> str:
+    """Format transcript as SRT subtitle format"""
+    srt_lines = []
+    for i, entry in enumerate(transcript_data, start=1):
+        start_time = format_srt_timestamp(entry['start'])
+        end_time = format_srt_timestamp(entry['start'] + entry['duration'])
+
+        srt_lines.append(f"{i}")
+        srt_lines.append(f"{start_time} --> {end_time}")
+        srt_lines.append(entry['text'])
+        srt_lines.append("")  # Empty line between entries
+
+    return "\n".join(srt_lines)
+
+def format_srt_timestamp(seconds: float) -> str:
+    """Convert seconds to SRT timestamp format (HH:MM:SS,mmm)"""
+    td = timedelta(seconds=seconds)
+    total_seconds = int(td.total_seconds())
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    secs = total_seconds % 60
+    millis = int((seconds - int(seconds)) * 1000)
+
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+def format_as_vtt(transcript_data: list) -> str:
+    """Format transcript as WebVTT subtitle format"""
+    vtt_lines = ["WEBVTT", ""]
+
+    for entry in transcript_data:
+        start_time = format_vtt_timestamp(entry['start'])
+        end_time = format_vtt_timestamp(entry['start'] + entry['duration'])
+
+        vtt_lines.append(f"{start_time} --> {end_time}")
+        vtt_lines.append(entry['text'])
+        vtt_lines.append("")  # Empty line between entries
+
+    return "\n".join(vtt_lines)
+
+def format_vtt_timestamp(seconds: float) -> str:
+    """Convert seconds to WebVTT timestamp format (HH:MM:SS.mmm)"""
+    td = timedelta(seconds=seconds)
+    total_seconds = int(td.total_seconds())
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    secs = total_seconds % 60
+    millis = int((seconds - int(seconds)) * 1000)
+
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}.{millis:03d}"
+
 @app.get("/")
 async def root():
     return {"greeting": "Hello, World!", "message": "Welcome to FastAPI!"}
 
 @app.get("/transcript/{video_id}")
-async def get_transcript(video_id: str, languages: str = "en"):
+async def get_transcript(
+    video_id: str,
+    languages: str = "en",
+    format: str = Query(
+        default="json",
+        description="Output format: json, text, srt, or vtt"
+    )
+):
     """
     Fetch YouTube transcript for a given video ID
 
     Args:
         video_id: YouTube video ID (not full URL)
         languages: Comma-separated language codes (e.g., "en,de,es")
+        format: Output format - json (default), text, srt, or vtt
 
-    Example: /transcript/dQw4w9WgXcQ?languages=en,de
+    Examples:
+        /transcript/dQw4w9WgXcQ?languages=en&format=json
+        /transcript/dQw4w9WgXcQ?format=text
+        /transcript/dQw4w9WgXcQ?format=srt
+        /transcript/dQw4w9WgXcQ?format=vtt
     """
     try:
         ytt_api = get_youtube_api()
@@ -54,15 +141,42 @@ async def get_transcript(video_id: str, languages: str = "en"):
 
         # Fetch the transcript
         fetched_transcript = ytt_api.fetch(video_id, languages=language_list)
+        transcript_data = fetched_transcript.to_raw_data()
 
-        return {
-            "video_id": fetched_transcript.video_id,
-            "language": fetched_transcript.language,
-            "language_code": fetched_transcript.language_code,
-            "is_generated": fetched_transcript.is_generated,
-            "transcript": fetched_transcript.to_raw_data()
-        }
+        # Return based on format
+        format_lower = format.lower()
 
+        if format_lower == "text":
+            return PlainTextResponse(
+                content=format_as_text(transcript_data),
+                media_type="text/plain"
+            )
+        elif format_lower == "srt":
+            return PlainTextResponse(
+                content=format_as_srt(transcript_data),
+                media_type="text/plain"
+            )
+        elif format_lower == "vtt":
+            return PlainTextResponse(
+                content=format_as_vtt(transcript_data),
+                media_type="text/plain"
+            )
+        elif format_lower == "json":
+            return {
+                "video_id": fetched_transcript.video_id,
+                "language": fetched_transcript.language,
+                "language_code": fetched_transcript.language_code,
+                "is_generated": fetched_transcript.is_generated,
+                "transcript": transcript_data
+            }
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid format '{format}'. Must be one of: json, text, srt, vtt"
+            )
+
+    except HTTPException:
+        raise  # Re-raise HTTPException without modification
     except TranscriptsDisabled:
         raise HTTPException(status_code=404, detail="Transcripts are disabled for this video")
     except NoTranscriptFound:
@@ -113,7 +227,7 @@ async def summarize_transcript(
     video_id: str,
     languages: str = "en",
     model: str = Query(
-        default="google/gemini-2.0-flash-exp:free",
+        default=MODEL_NAME,
         description="OpenRouter model ID (use :free models from openrouter-free-llms.txt)"
     )
 ):
@@ -167,38 +281,20 @@ async def summarize_transcript(
                 {
                     "role": "system",
                     "content": (
-                        "# IDENTITY and PURPOSE\n\n"
-                        "You are an AI assistant specialized in creating concise, informative summaries of YouTube video content "
-                        "based on transcripts. Your role is to analyze video transcripts, identify key points, main themes, and "
-                        "significant moments, then organize this information into a well-structured summary that includes relevant "
-                        "timestamps. You excel at distilling lengthy content into digestible summaries while preserving the most "
-                        "valuable information and maintaining the original flow of the video.\n\n"
-                        "Take a step back and think step-by-step about how to achieve the best possible results by following the steps below.\n\n"
-                        "## STEPS\n\n"
-                        "- Carefully read through the entire transcript to understand the overall content and structure of the video\n"
-                        "- Identify the main topic and purpose of the video\n"
-                        "- Note key points, important concepts, and significant moments throughout the transcript\n"
-                        "- Pay attention to natural transitions or segment changes in the video\n"
-                        "- Extract relevant timestamps for important moments or topic changes\n"
-                        "- Organize information into a logical structure that follows the video's progression\n"
-                        "- Create a concise summary that captures the essence of the video\n"
-                        "- Include timestamps alongside key points to allow easy navigation\n"
-                        "- Ensure the summary is comprehensive yet concise\n\n"
-                        "## OUTPUT INSTRUCTIONS\n\n"
-                        "- Only output Markdown\n"
-                        "- Begin with a brief overview of the video's main topic and purpose\n"
-                        "- Structure the summary with clear headings and subheadings that reflect the video's organization\n"
-                        "- Include timestamps in [MM:SS] format (or [HH:MM:SS] for videos over 1 hour) before each key point or section\n"
-                        "- Keep the summary concise but comprehensive, focusing on the most valuable information\n"
-                        "- Use bullet points for lists of related points when appropriate\n"
-                        "- Bold or italicize particularly important concepts or takeaways\n"
-                        "- End with a brief conclusion summarizing the video's main message or call to action\n"
-                        "- Ensure you follow ALL these instructions when creating your output."
+                        "You are a YouTube video transcript summarizer. Analyze the transcript and create a concise, well-structured summary in Markdown format.\n\n"
+                        "Your summary must include:\n"
+                        "1. A brief overview of the video's main topic\n"
+                        "2. Key points organized with clear headings\n"
+                        "3. Timestamps in [MM:SS] format (or [HH:MM:SS] for videos over 1 hour) before important moments\n"
+                        "4. Bullet points for related concepts\n"
+                        "5. Bold text for critical takeaways\n"
+                        "6. A brief conclusion\n\n"
+                        "Focus on extracting the most valuable information while maintaining the video's logical flow."
                     )
                 },
                 {
                     "role": "user",
-                    "content": f"Please create a detailed summary of this YouTube video transcript:\n\n{transcript_text}"
+                    "content": f"Summarize this YouTube video transcript:\n\n{transcript_text}"
                 }
             ]
         }

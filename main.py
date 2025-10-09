@@ -17,6 +17,15 @@ app = FastAPI()
 # Default to Google Gemini 2.0 Flash (1M context window, most reliable availability)
 MODEL_NAME = os.getenv("model_id") or os.getenv("MODEL_ID") or "google/gemini-2.0-flash-exp:free"
 
+# Fallback model chain - will try these in order if one is rate-limited
+FALLBACK_MODELS = [
+    "google/gemini-2.0-flash-exp:free",  # 1M context, Google reliability
+    "deepseek/deepseek-chat-v3.1:free",  # 163k context, very capable
+    "meta-llama/llama-3.3-70b-instruct:free",  # 65k context, Meta reliability
+    "mistralai/mistral-nemo:free",  # 131k context, Mistral reliability
+    "nvidia/nemotron-nano-9b-v2:free",  # 128k context, NVIDIA reliability
+]
+
 # Initialize YouTube Transcript API with proxy support for Railway deployment
 def get_youtube_api():
     """Create YouTubeTranscriptApi instance with optional proxy configuration"""
@@ -108,6 +117,93 @@ def format_vtt_timestamp(seconds: float) -> str:
     millis = int((seconds - int(seconds)) * 1000)
 
     return f"{hours:02d}:{minutes:02d}:{secs:02d}.{millis:03d}"
+
+def call_openrouter_with_fallback(
+    openrouter_api_key: str,
+    transcript_text: str,
+    preferred_model: str,
+    system_prompt: str
+) -> dict:
+    """
+    Call OpenRouter API with automatic fallback to alternative models if rate-limited.
+    
+    Tries preferred_model first, then falls back to FALLBACK_MODELS chain if rate-limited.
+    Returns: dict with 'summary' and 'model_used' keys
+    """
+    # Build list of models to try: preferred first, then fallbacks
+    models_to_try = [preferred_model] if preferred_model not in FALLBACK_MODELS else []
+    models_to_try.extend(FALLBACK_MODELS)
+    
+    headers = {
+        "Authorization": f"Bearer {openrouter_api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com/creativerezz/fastapi",
+        "X-Title": "Automatehub YouTube Summarizer"
+    }
+    
+    last_error = None
+    
+    for model in models_to_try:
+        try:
+            payload = {
+                "model": model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": system_prompt
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Summarize this transcript:\n\n{transcript_text}"
+                    }
+                ]
+            }
+            
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=60
+            )
+            
+            # If successful, return immediately
+            if response.status_code == 200:
+                result = response.json()
+                return {
+                    "summary": result["choices"][0]["message"]["content"],
+                    "model_used": model,
+                    "usage": result.get("usage", {}),
+                    "fallback_used": model != preferred_model
+                }
+            
+            # If rate-limited (429), try next model
+            if response.status_code == 429:
+                print(f"Model {model} is rate-limited, trying next fallback...")
+                last_error = f"Rate limited: {model}"
+                continue
+            
+            # For other errors, raise immediately
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"OpenRouter API error with {model}: {response.text}"
+            )
+            
+        except requests.exceptions.Timeout:
+            print(f"Model {model} timed out, trying next fallback...")
+            last_error = f"Timeout: {model}"
+            continue
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"Error with model {model}: {str(e)}, trying next fallback...")
+            last_error = f"Error with {model}: {str(e)}"
+            continue
+    
+    # If all models failed, raise error with details
+    raise HTTPException(
+        status_code=503,
+        detail=f"All models are currently unavailable. Last error: {last_error}. Please try again in a few minutes."
+    )
 
 @app.get("/")
 async def root():
@@ -268,57 +364,30 @@ async def summarize_transcript(
             for entry in fetched_transcript.to_raw_data()
         ])
 
-        # Prepare OpenRouter API request
-        headers = {
-            "Authorization": f"Bearer {openrouter_api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/yourusername/fastapi-youtube-transcript",
-            "X-Title": "FastAPI YouTube Transcript Summarizer"
-        }
-
-        payload = {
-            "model": model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a video transcript summarizer. Create Markdown summaries with: "
-                        "1) Brief overview, 2) Clear headings, 3) Timestamps [MM:SS] before key points, "
-                        "4) Bullet points, 5) Bold takeaways, 6) Conclusion. "
-                        "Output only the summary, no explanations."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": f"Summarize this transcript:\n\n{transcript_text}"
-                }
-            ]
-        }
-
-        # Call OpenRouter API
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=60
+        # System prompt for summarization
+        system_prompt = (
+            "You are a video transcript summarizer. Create Markdown summaries with: "
+            "1) Brief overview, 2) Clear headings, 3) Timestamps [MM:SS] before key points, "
+            "4) Bullet points, 5) Bold takeaways, 6) Conclusion. "
+            "Output only the summary, no explanations."
         )
 
-        if response.status_code != 200:
-            raise HTTPException(
-                status_code=response.status_code,
-                detail=f"OpenRouter API error: {response.text}"
-            )
-
-        result = response.json()
-        summary = result["choices"][0]["message"]["content"]
+        # Call OpenRouter with automatic fallback
+        result = call_openrouter_with_fallback(
+            openrouter_api_key=openrouter_api_key,
+            transcript_text=transcript_text,
+            preferred_model=model,
+            system_prompt=system_prompt
+        )
 
         return {
             "video_id": video_id,
             "language": fetched_transcript.language,
-            "model_used": model,
-            "summary": summary,
+            "model": result["model_used"],
+            "summary": result["summary"],
             "transcript_length": len(fetched_transcript.to_raw_data()),
-            "usage": result.get("usage", {})
+            "usage": result.get("usage", {}),
+            "fallback_used": result.get("fallback_used", False)
         }
 
     except TranscriptsDisabled:
@@ -431,53 +500,23 @@ async def apply_pattern(
             for entry in fetched_transcript.to_raw_data()
         ])
 
-        # Prepare OpenRouter API request
-        headers = {
-            "Authorization": f"Bearer {openrouter_api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/creativerezz/fastapi",
-            "X-Title": f"FastAPI Fabric Pattern: {pattern_name}"
-        }
-
-        payload = {
-            "model": model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": transcript_text
-                }
-            ]
-        }
-
-        # Call OpenRouter API
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=90
+        # Call OpenRouter with automatic fallback
+        result = call_openrouter_with_fallback(
+            openrouter_api_key=openrouter_api_key,
+            transcript_text=transcript_text,
+            preferred_model=model,
+            system_prompt=system_prompt
         )
-
-        if response.status_code != 200:
-            raise HTTPException(
-                status_code=response.status_code,
-                detail=f"OpenRouter API error: {response.text}"
-            )
-
-        result = response.json()
-        output = result["choices"][0]["message"]["content"]
 
         return {
             "video_id": video_id,
             "language": fetched_transcript.language,
-            "pattern_used": pattern_name,
-            "model_used": model,
-            "output": output,
+            "pattern": pattern_name,
+            "model": result["model_used"],
+            "result": result["summary"],  # Still called 'summary' in fallback function
             "transcript_length": len(fetched_transcript.to_raw_data()),
-            "usage": result.get("usage", {})
+            "usage": result.get("usage", {}),
+            "fallback_used": result.get("fallback_used", False)
         }
 
     except HTTPException:

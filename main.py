@@ -338,6 +338,167 @@ async def summarize_transcript(
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=error_details)
 
+@app.get("/patterns")
+async def list_patterns():
+    """
+    List all available Fabric AI patterns
+
+    Returns:
+        List of available pattern names that can be used with /transcript/{video_id}/pattern/{pattern_name}
+    """
+    import os
+    patterns_dir = os.path.join(os.path.dirname(__file__), "patterns")
+    
+    try:
+        patterns = []
+        for item in sorted(os.listdir(patterns_dir)):
+            item_path = os.path.join(patterns_dir, item)
+            if os.path.isdir(item_path) and not item.startswith('.'):
+                # Check if it has a system.md file
+                system_file = os.path.join(item_path, "system.md")
+                if os.path.exists(system_file):
+                    patterns.append(item)
+        
+        return {
+            "total_patterns": len(patterns),
+            "patterns": patterns
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error listing patterns: {str(e)}")
+
+@app.get("/transcript/{video_id}/pattern/{pattern_name}")
+async def apply_pattern(
+    video_id: str,
+    pattern_name: str,
+    languages: str = "en",
+    model: str = Query(
+        default=MODEL_NAME,
+        description="OpenRouter model ID (use :free models from openrouter-free-llms.txt)"
+    )
+):
+    """
+    Apply any Fabric AI pattern to a YouTube transcript
+
+    Args:
+        video_id: YouTube video ID (not full URL)
+        pattern_name: Name of the Fabric pattern to apply (e.g., 'extract_wisdom', 'create_summary', 'analyze_paper')
+        languages: Comma-separated language codes (default: "en")
+        model: OpenRouter model identifier
+
+    Examples:
+        /transcript/dQw4w9WgXcQ/pattern/extract_wisdom
+        /transcript/VIDEO_ID/pattern/create_summary
+        /transcript/VIDEO_ID/pattern/analyze_paper
+        /transcript/VIDEO_ID/pattern/create_quiz
+
+    Use GET /patterns to see all available patterns
+    """
+    import os
+    
+    try:
+        # Get OpenRouter API key
+        openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+        if not openrouter_api_key:
+            raise HTTPException(
+                status_code=500,
+                detail="OPENROUTER_API_KEY environment variable not set"
+            )
+
+        # Load the pattern's system prompt
+        patterns_dir = os.path.join(os.path.dirname(__file__), "patterns")
+        pattern_dir = os.path.join(patterns_dir, pattern_name)
+        system_file = os.path.join(pattern_dir, "system.md")
+        
+        if not os.path.exists(system_file):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Pattern '{pattern_name}' not found. Use GET /patterns to see available patterns."
+            )
+        
+        # Read the system prompt
+        with open(system_file, 'r', encoding='utf-8') as f:
+            system_prompt = f.read()
+
+        # Fetch the transcript
+        ytt_api = get_youtube_api()
+        language_list = [lang.strip() for lang in languages.split(",")]
+        fetched_transcript = ytt_api.fetch(video_id, languages=language_list)
+
+        # Convert transcript to plain text
+        transcript_text = "\n".join([
+            f"[{entry['start']:.2f}s] {entry['text']}"
+            for entry in fetched_transcript.to_raw_data()
+        ])
+
+        # Prepare OpenRouter API request
+        headers = {
+            "Authorization": f"Bearer {openrouter_api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/creativerezz/fastapi",
+            "X-Title": f"FastAPI Fabric Pattern: {pattern_name}"
+        }
+
+        payload = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": transcript_text
+                }
+            ]
+        }
+
+        # Call OpenRouter API
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=90
+        )
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"OpenRouter API error: {response.text}"
+            )
+
+        result = response.json()
+        output = result["choices"][0]["message"]["content"]
+
+        return {
+            "video_id": video_id,
+            "language": fetched_transcript.language,
+            "pattern_used": pattern_name,
+            "model_used": model,
+            "output": output,
+            "transcript_length": len(fetched_transcript.to_raw_data()),
+            "usage": result.get("usage", {})
+        }
+
+    except HTTPException:
+        raise
+    except TranscriptsDisabled:
+        raise HTTPException(status_code=404, detail="Transcripts are disabled for this video")
+    except NoTranscriptFound:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No transcript found for languages: {languages}"
+        )
+    except VideoUnavailable:
+        raise HTTPException(status_code=404, detail="Video not found or unavailable")
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=504, detail="OpenRouter API request timed out")
+    except Exception as e:
+        import traceback
+        error_details = f"{type(e).__name__}: {str(e)}" if str(e) else f"{type(e).__name__}: {repr(e)}"
+        print(f"Pattern application error: {error_details}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=error_details)
+
 @app.get("/transcript/{video_id}/extract-wisdom")
 async def extract_wisdom(
     video_id: str,

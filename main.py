@@ -14,8 +14,8 @@ load_dotenv()
 app = FastAPI()
 
 # Get model name from environment variables
-# Default to DeepSeek V3.1 (163k context, very reliable)
-MODEL_NAME = os.getenv("model_id") or os.getenv("MODEL_ID") or "deepseek/deepseek-chat-v3.1:free"
+# Default to Google Gemini 2.0 Flash (1M context window, most reliable availability)
+MODEL_NAME = os.getenv("model_id") or os.getenv("MODEL_ID") or "google/gemini-2.0-flash-exp:free"
 
 # Initialize YouTube Transcript API with proxy support for Railway deployment
 def get_youtube_api():

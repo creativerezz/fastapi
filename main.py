@@ -15,15 +15,16 @@ app = FastAPI()
 
 # Get model name from environment variables
 # Default to Google Gemini 2.0 Flash (1M context window, most reliable availability)
-MODEL_NAME = os.getenv("model_id") or os.getenv("MODEL_ID") or "google/gemini-2.0-flash-exp:free"
+MODEL_NAME = os.getenv("model_id") or os.getenv("MODEL_ID") or "meta-llama/llama-3.3-70b-instruct:free"
 
 # Fallback model chain - will try these in order if one is rate-limited
 FALLBACK_MODELS = [
-    "google/gemini-2.0-flash-exp:free",  # 1M context, Google reliability
-    "deepseek/deepseek-chat-v3.1:free",  # 163k context, very capable
     "meta-llama/llama-3.3-70b-instruct:free",  # 65k context, Meta reliability
-    "mistralai/mistral-nemo:free",  # 131k context, Mistral reliability
-    "nvidia/nemotron-nano-9b-v2:free",  # 128k context, NVIDIA reliability
+    "qwen/qwen3-coder:free",  # 262k context, very capable
+    "google/gemini-2.0-flash-exp:free",  # 1M context, Google reliability
+    # "deepseek/deepseek-chat-v3.1:free",  # 163k context, very capable
+    # "mistralai/mistral-nemo:free",  # 131k context, Mistral reliability
+    # "nvidia/nemotron-nano-9b-v2:free",  # 128k context, NVIDIA reliability
 ]
 
 # Initialize YouTube Transcript API with proxy support for Railway deployment

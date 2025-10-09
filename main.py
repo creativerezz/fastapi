@@ -337,3 +337,136 @@ async def summarize_transcript(
         print(f"Summarization error: {error_details}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=error_details)
+
+@app.get("/transcript/{video_id}/extract-wisdom")
+async def extract_wisdom(
+    video_id: str,
+    languages: str = "en",
+    model: str = Query(
+        default=MODEL_NAME,
+        description="OpenRouter model ID (use :free models from openrouter-free-llms.txt)"
+    )
+):
+    """
+    Extract deep insights, ideas, quotes, and wisdom from YouTube video transcript
+    using Daniel Miessler's extract_wisdom pattern from Fabric AI framework
+
+    Args:
+        video_id: YouTube video ID (not full URL)
+        languages: Comma-separated language codes (default: "en")
+        model: OpenRouter model identifier (default from env)
+
+    Returns structured wisdom extraction with:
+        - SUMMARY (25 words)
+        - IDEAS (20-50 items, 16 words each)
+        - INSIGHTS (10-20 items, 16 words each)
+        - QUOTES (15-30 exact quotes)
+        - HABITS (15-30 personal habits)
+        - FACTS (15-30 facts)
+        - REFERENCES (books, tools, projects)
+        - ONE-SENTENCE TAKEAWAY
+        - RECOMMENDATIONS (15-30 items)
+
+    Example: /transcript/dQw4w9WgXcQ/extract-wisdom
+    """
+    try:
+        # Get OpenRouter API key
+        openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+        if not openrouter_api_key:
+            raise HTTPException(
+                status_code=500,
+                detail="OPENROUTER_API_KEY environment variable not set"
+            )
+
+        # Fetch the transcript
+        ytt_api = get_youtube_api()
+        language_list = [lang.strip() for lang in languages.split(",")]
+        fetched_transcript = ytt_api.fetch(video_id, languages=language_list)
+
+        # Convert transcript to plain text
+        transcript_text = "\n".join([
+            f"[{entry['start']:.2f}s] {entry['text']}"
+            for entry in fetched_transcript.to_raw_data()
+        ])
+
+        # Prepare OpenRouter API request with extract_wisdom system prompt
+        headers = {
+            "Authorization": f"Bearer {openrouter_api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/creativerezz/fastapi",
+            "X-Title": "FastAPI YouTube Transcript Wisdom Extractor"
+        }
+
+        payload = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You extract surprising, insightful, and interesting information from text content. "
+                        "You are interested in insights related to the purpose and meaning of life, human flourishing, "
+                        "the role of technology in the future of humanity, artificial intelligence, learning, and continuous improvement.\n\n"
+                        "Extract from the content:\n"
+                        "- SUMMARY (25 words with who is presenting and content discussed)\n"
+                        "- IDEAS (20-50 items, exactly 16 words each)\n"
+                        "- INSIGHTS (10-20 items, exactly 16 words each - refined versions of best ideas)\n"
+                        "- QUOTES (15-30 exact quotes from input)\n"
+                        "- HABITS (15-30 personal habits mentioned, exactly 16 words each)\n"
+                        "- FACTS (15-30 facts about the world, exactly 16 words each)\n"
+                        "- REFERENCES (all books, tools, projects mentioned)\n"
+                        "- ONE-SENTENCE TAKEAWAY (exactly 15 words capturing essence)\n"
+                        "- RECOMMENDATIONS (15-30 items, exactly 16 words each)\n\n"
+                        "Output only Markdown. Use bulleted lists. No warnings or notes. "
+                        "Do not repeat items. Do not start items with same words."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": f"Extract wisdom from this content:\n\n{transcript_text}"
+                }
+            ]
+        }
+
+        # Call OpenRouter API
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=90  # Longer timeout for wisdom extraction
+        )
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"OpenRouter API error: {response.text}"
+            )
+
+        result = response.json()
+        wisdom = result["choices"][0]["message"]["content"]
+
+        return {
+            "video_id": video_id,
+            "language": fetched_transcript.language,
+            "model_used": model,
+            "wisdom": wisdom,
+            "transcript_length": len(fetched_transcript.to_raw_data()),
+            "usage": result.get("usage", {})
+        }
+
+    except TranscriptsDisabled:
+        raise HTTPException(status_code=404, detail="Transcripts are disabled for this video")
+    except NoTranscriptFound:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No transcript found for languages: {languages}"
+        )
+    except VideoUnavailable:
+        raise HTTPException(status_code=404, detail="Video not found or unavailable")
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=504, detail="OpenRouter API request timed out")
+    except Exception as e:
+        import traceback
+        error_details = f"{type(e).__name__}: {str(e)}" if str(e) else f"{type(e).__name__}: {repr(e)}"
+        print(f"Wisdom extraction error: {error_details}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=error_details)

@@ -835,3 +835,80 @@ async def chat_about_video(
         print(f"Chat error: {error_details}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=error_details)
+
+
+@app.get("/search")
+async def search_youtube(
+    q: str = Query(..., description="Search query"),
+    max_results: int = Query(10, ge=1, le=50, description="Maximum number of results")
+):
+    """
+    Search YouTube videos using YouTube Data API v3
+    
+    Returns list of video results with:
+    - videoId: YouTube video ID
+    - title: Video title
+    - channelTitle: Channel name
+    - thumbnailUrl: Video thumbnail URL
+    - publishedAt: Publication date
+    - description: Video description snippet
+    """
+    try:
+        # Get YouTube Data API key from environment
+        api_key = os.getenv("YOUTUBE_API_KEY")
+        if not api_key:
+            raise HTTPException(
+                status_code=500,
+                detail="YouTube API key not configured. Please set YOUTUBE_API_KEY environment variable."
+            )
+        
+        # Call YouTube Data API v3 Search endpoint
+        search_url = "https://www.googleapis.com/youtube/v3/search"
+        params = {
+            "part": "snippet",
+            "q": q,
+            "type": "video",
+            "maxResults": max_results,
+            "key": api_key
+        }
+        
+        response = requests.get(search_url, params=params, timeout=10)
+        
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"YouTube API error: {response.text}"
+            )
+        
+        data = response.json()
+        
+        # Transform results to simplified format
+        results = []
+        for item in data.get("items", []):
+            snippet = item.get("snippet", {})
+            video_id = item.get("id", {}).get("videoId")
+            
+            if video_id:  # Only include valid video results
+                results.append({
+                    "videoId": video_id,
+                    "title": snippet.get("title", ""),
+                    "channelTitle": snippet.get("channelTitle", ""),
+                    "thumbnailUrl": snippet.get("thumbnails", {}).get("medium", {}).get("url", ""),
+                    "publishedAt": snippet.get("publishedAt", ""),
+                    "description": snippet.get("description", "")
+                })
+        
+        return {
+            "query": q,
+            "resultCount": len(results),
+            "results": results
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_details = f"{type(e).__name__}: {str(e)}"
+        print(f"Search error: {error_details}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=error_details)

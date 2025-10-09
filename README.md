@@ -34,11 +34,15 @@ A FastAPI application that fetches YouTube video transcripts using the youtube-t
 - `GET /transcript/{video_id}/list` - List all available transcripts
 - `GET /transcript/{video_id}/summarize` - **AI summary of transcript** (uses OpenRouter free models)
 
-### 🎨 Fabric AI Pattern Endpoints (NEW!)
+### 🎨 Fabric AI Pattern Endpoints
 
 - `GET /patterns` - **List all 226 available patterns**
 - `GET /transcript/{video_id}/pattern/{pattern_name}` - **Apply any Fabric pattern dynamically**
 - `GET /transcript/{video_id}/extract-wisdom` - Extract ideas, insights, quotes, habits, facts, references
+
+### 🔍 YouTube Search Endpoint (NEW!)
+
+- `GET /search` - **Search YouTube videos in real-time** (returns video metadata with thumbnails)
 
 **Popular patterns include:**
 
@@ -84,6 +88,7 @@ Quick setup:
    - `WEBSHARE_PROXY_USERNAME` - Get from [Webshare](https://www.webshare.io/)
    - `WEBSHARE_PROXY_PASSWORD` - Get from [Webshare](https://www.webshare.io/)
    - `OPENROUTER_API_KEY` - Get from [OpenRouter](https://openrouter.ai/keys) (for AI summaries)
+   - `YOUTUBE_API_KEY` - Get from [Google Cloud Console](https://console.cloud.google.com/) (for search)
 
 ### Available Free Models
 
@@ -171,6 +176,20 @@ curl "https://api.automatehub.dev/transcript/VIDEO_ID/pattern/create_quiz"
 ```
 
 **See the [Complete Fabric Patterns Guide](docs/fabric-patterns-api.md) for all 226 patterns organized by category!**
+
+### 🔍 Search YouTube Videos (NEW!)
+
+```bash
+curl "https://api.automatehub.dev/search?q=swift%20programming&max_results=10"
+```
+
+**Response includes:**
+- Video ID, title, channel name
+- Thumbnail URL (320x180)
+- Publication date
+- Description snippet
+
+**See the [YouTube Search API Guide](docs/youtube-search-api.md) for detailed documentation!**
 
 ## 📝 Notes
 

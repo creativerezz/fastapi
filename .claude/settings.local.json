@@ -39,7 +39,8 @@
       "Bash(.venv/bin/hypercorn main:app --reload --bind \"0.0.0.0:8000\")",
       "mcp__Endgame__review",
       "mcp__Endgame__deploy",
-      "Bash(cat README.md)"
+      "Bash(cat README.md)",
+      "Bash(cat .mcp.json)"
     ],
     "deny": [],
     "ask": []

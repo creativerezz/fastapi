@@ -3,6 +3,8 @@ import requests
 from datetime import timedelta
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel
+from typing import List, Dict, Any, Optional
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api.proxies import WebshareProxyConfig
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
@@ -12,6 +14,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = FastAPI()
+
+# Request/Response models for chat endpoint
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    message: str
+    conversation_history: Optional[List[ChatMessage]] = []
 
 # Get model name from environment variables
 # Default to Google Gemini 2.0 Flash (1M context window, most reliable availability)
@@ -676,7 +687,7 @@ async def extract_wisdom(
 @app.post("/transcript/{video_id}/chat")
 async def chat_about_video(
     video_id: str,
-    request_body: dict,
+    request_body: ChatRequest,
     languages: str = "en",
     model: str = Query(
         default=MODEL_NAME,
@@ -706,11 +717,11 @@ async def chat_about_video(
     """
     try:
         # Validate request
-        user_message = request_body.get("message")
+        user_message = request_body.message
         if not user_message:
             raise HTTPException(status_code=400, detail="Message field is required")
         
-        conversation_history = request_body.get("conversation_history", [])
+        conversation_history = request_body.conversation_history or []
         
         # Get OpenRouter API key
         openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
@@ -745,10 +756,10 @@ async def chat_about_video(
         
         # Add conversation history
         for msg in conversation_history:
-            if msg.get("role") in ["user", "assistant"] and msg.get("content"):
+            if msg.role in ["user", "assistant"] and msg.content:
                 messages.append({
-                    "role": msg["role"],
-                    "content": msg["content"]
+                    "role": msg.role,
+                    "content": msg.content
                 })
         
         # Add current user message

@@ -27,9 +27,25 @@
       "Bash(printf \"JSON (default): \")",
       "Bash(printf \"TEXT format:\\n\")",
       "Bash(bun create:*)",
-      "Bash(bun install:*)"
+      "Bash(bun install:*)",
+      "Read(//Users/reza/**)",
+      "Bash(cat /Users/reza/.config/claude/mcp.json /Users/reza/.cursor/mcp.json)",
+      "Bash(cat /Users/reza/.cursor/mcp.json)",
+      "Bash(cat /Users/reza/.cursor/mcp.json.backup)",
+      "Bash(xargs kill -9)",
+      "Bash(source .venv/bin/activate)",
+      "Bash(python -m hypercorn main:app --reload --bind \"0.0.0.0:8000\")",
+      "Bash(.venv/bin/pip install -r requirements.txt)",
+      "Bash(.venv/bin/hypercorn main:app --reload --bind \"0.0.0.0:8000\")",
+      "mcp__Endgame__review",
+      "mcp__Endgame__deploy",
+      "Bash(cat README.md)"
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "shadcn"
+  ]
 }
